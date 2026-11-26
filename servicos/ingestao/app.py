@@ -28,12 +28,16 @@ ARQUIVO_INDICE = Path(
         str(Path(__file__).resolve().parent / "indice.json")
     )
 )
-REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
-REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+PASTA_DOCUMENTOS = Path(
+    os.getenv(
+        "PASTA_DOCUMENTOS",
+        str(Path(__file__).resolve().parents[2] / "documentos")
+    )
+)
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
-cliente_redis = redis.Redis(
-    host=REDIS_HOST,
-    port=REDIS_PORT,
+cliente_redis = redis.Redis.from_url(
+    REDIS_URL,
     decode_responses=True
 )
 
@@ -76,6 +80,20 @@ def carregar_indice():
             "origem": item["origem"],
             "vetor": vetorizador.vetorizar(item["texto"])
         })
+
+
+def indexar_pasta_documentos():
+    if INDICE or not PASTA_DOCUMENTOS.is_dir():
+        return
+
+    docs = []
+    for arquivo in sorted(PASTA_DOCUMENTOS.glob("*.txt")):
+        texto = arquivo.read_text(encoding="utf-8").strip()
+        if texto:
+            docs.append(Documento(texto=texto, origem=arquivo.name))
+
+    if docs:
+        indexar(docs)
 
 
 @app.post("/indexar")
@@ -162,3 +180,4 @@ def saude():
 
 # Recupera os documentos salvos quando o servico inicia.
 carregar_indice()
+indexar_pasta_documentos()

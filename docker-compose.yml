@@ -1,56 +1,71 @@
-
 services:
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
 
   ingestao:
-    build: .
-    command: uvicorn servicos.ingestao.app:app --host 0.0.0.0 --port 8001
-    ports:
-      - "8001:8001"
+    build:
+      context: .
+      dockerfile: servicos/ingestao/Dockerfile
     volumes:
       - dados_ingestao:/app/servicos/ingestao/dados
     environment:
       - ARQUIVO_INDICE=/app/servicos/ingestao/dados/indice.json
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis: {condition: service_healthy}
 
   recuperacao:
-    build: .
-    command: uvicorn servicos.recuperacao.app:app --host 0.0.0.0 --port 8002
-    ports:
-      - "8002:8002"
+    build:
+      context: .
+      dockerfile: servicos/recuperacao/Dockerfile
     environment:
       - URL_INGESTAO=http://ingestao:8001
-    depends_on:
-      - ingestao
+    depends_on: [ingestao]
 
   geracao:
-    build: .
-    command: uvicorn servicos.geracao.app:app --host 0.0.0.0 --port 8003
-    ports:
-      - "8003:8003"
+    build:
+      context: .
+      dockerfile: servicos/geracao/Dockerfile
     environment:
       - URL_RECUPERACAO=http://recuperacao:8002
       - LLM_API_KEY=${LLM_API_KEY:-}
-    depends_on:
-      - recuperacao
+      - LLM_API_URL=${LLM_API_URL:-https://api.openai.com/v1/chat/completions}
+      - LLM_MODELO=${LLM_MODELO:-gpt-4o-mini}
+    depends_on: [recuperacao]
 
-      
   worker:
-    build: .
-    command: python -m servicos.mensageria.worker
+    build:
+      context: .
+      dockerfile: servicos/mensageria/Dockerfile
     environment:
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      URL_INGESTAO: http://ingestao:8001
+      - REDIS_URL=redis://redis:6379/0
+      - URL_INGESTAO=http://ingestao:8001
     depends_on:
-      - redis
-      - ingestao
+      redis: {condition: service_healthy}
+      ingestao: {condition: service_started}
     restart: unless-stopped
 
+  gateway:
+    build:
+      context: .
+      dockerfile: servicos/gateway/Dockerfile
+    ports: ["8000:8000"]
+    environment:
+      - URL_GERACAO=http://geracao:8003
+      - URL_INGESTAO=http://ingestao:8001
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SEGREDO=${JWT_SEGREDO:?copie o .env.example para .env}
+      - USUARIO_DEMO=${USUARIO_DEMO:?copie o .env.example para .env}
+      - SENHA_DEMO=${SENHA_DEMO:?copie o .env.example para .env}
+      - LIMITE_POR_MINUTO=${LIMITE_POR_MINUTO:-30}
+    depends_on:
+      redis: {condition: service_healthy}
+      geracao: {condition: service_started}
+      ingestao: {condition: service_started}
 
 volumes:
   dados_ingestao:
