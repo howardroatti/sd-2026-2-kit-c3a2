@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from opentelemetry.propagate import inject
 from pydantic import BaseModel
 
 from servicos.comum.embeddings import Vetorizador
@@ -138,10 +139,16 @@ def indexar_async(docs: list[Documento]):
         for d in docs
     ]
 
+    carrier = {}
+    inject(carrier)
+
     try:
         cliente_redis.rpush(
             "fila_ingestao",
-            json.dumps(documentos, ensure_ascii=False)
+            json.dumps(
+                {"trace": carrier, "documentos": documentos},
+                ensure_ascii=False
+            )
         )
 
     except redis.RedisError:
