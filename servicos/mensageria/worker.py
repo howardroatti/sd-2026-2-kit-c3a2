@@ -12,6 +12,8 @@ import time
 
 import redis
 import requests
+from opentelemetry import trace
+from opentelemetry.propagate import extract
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
@@ -21,6 +23,8 @@ URL_INGESTAO = os.getenv(
 )
 
 NOME_FILA = "fila_ingestao"
+
+tracer = trace.get_tracer("worker")
 
 cliente_redis = redis.Redis.from_url(
     REDIS_URL,
@@ -58,10 +62,16 @@ def iniciar_worker():
                 continue
 
             _, mensagem = resultado
-            documentos = json.loads(mensagem)
+            msg = json.loads(mensagem)
+            if isinstance(msg, list):
+                msg = {"documentos": msg}
 
             try:
-                processar_documentos(documentos)
+                with tracer.start_as_current_span(
+                    "processar_documentos",
+                    context=extract(msg.get("trace", {}))
+                ):
+                    processar_documentos(msg["documentos"])
 
             except requests.RequestException as erro:
                 print("Erro na ingestao:", erro, flush=True)
@@ -74,7 +84,7 @@ def iniciar_worker():
             print("Erro de conexao com Redis:", erro, flush=True)
             time.sleep(3)
 
-        except (ValueError, TypeError) as erro:
+        except (ValueError, TypeError, KeyError, AttributeError) as erro:
             print("Mensagem invalida:", erro, flush=True)
 
 

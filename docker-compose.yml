@@ -1,3 +1,9 @@
+x-otel: &otel
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  OTEL_METRICS_EXPORTER: none
+  OTEL_LOGS_EXPORTER: none
+
 services:
   redis:
     image: redis:7-alpine
@@ -6,6 +12,12 @@ services:
       interval: 5s
       retries: 5
 
+  jaeger:
+    image: jaegertracing/jaeger:2.23.0
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+
   ingestao:
     build:
       context: .
@@ -13,8 +25,10 @@ services:
     volumes:
       - dados_ingestao:/app/servicos/ingestao/dados
     environment:
-      - ARQUIVO_INDICE=/app/servicos/ingestao/dados/indice.json
-      - REDIS_URL=redis://redis:6379/0
+      <<: *otel
+      OTEL_SERVICE_NAME: ingestao
+      ARQUIVO_INDICE: /app/servicos/ingestao/dados/indice.json
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       redis: {condition: service_healthy}
 
@@ -23,7 +37,9 @@ services:
       context: .
       dockerfile: servicos/recuperacao/Dockerfile
     environment:
-      - URL_INGESTAO=http://ingestao:8001
+      <<: *otel
+      OTEL_SERVICE_NAME: recuperacao
+      URL_INGESTAO: http://ingestao:8001
     depends_on: [ingestao]
 
   geracao:
@@ -31,10 +47,12 @@ services:
       context: .
       dockerfile: servicos/geracao/Dockerfile
     environment:
-      - URL_RECUPERACAO=http://recuperacao:8002
-      - LLM_API_KEY=${LLM_API_KEY:-}
-      - LLM_API_URL=${LLM_API_URL:-https://api.openai.com/v1/chat/completions}
-      - LLM_MODELO=${LLM_MODELO:-gpt-4o-mini}
+      <<: *otel
+      OTEL_SERVICE_NAME: geracao
+      URL_RECUPERACAO: http://recuperacao:8002
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_API_URL: ${LLM_API_URL:-https://api.openai.com/v1/chat/completions}
+      LLM_MODELO: ${LLM_MODELO:-gpt-4o-mini}
     depends_on: [recuperacao]
 
   worker:
@@ -42,8 +60,10 @@ services:
       context: .
       dockerfile: servicos/mensageria/Dockerfile
     environment:
-      - REDIS_URL=redis://redis:6379/0
-      - URL_INGESTAO=http://ingestao:8001
+      <<: *otel
+      OTEL_SERVICE_NAME: worker
+      REDIS_URL: redis://redis:6379/0
+      URL_INGESTAO: http://ingestao:8001
     depends_on:
       redis: {condition: service_healthy}
       ingestao: {condition: service_started}
@@ -55,13 +75,15 @@ services:
       dockerfile: servicos/gateway/Dockerfile
     ports: ["8000:8000"]
     environment:
-      - URL_GERACAO=http://geracao:8003
-      - URL_INGESTAO=http://ingestao:8001
-      - REDIS_URL=redis://redis:6379/0
-      - JWT_SEGREDO=${JWT_SEGREDO:?copie o .env.example para .env}
-      - USUARIO_DEMO=${USUARIO_DEMO:?copie o .env.example para .env}
-      - SENHA_DEMO=${SENHA_DEMO:?copie o .env.example para .env}
-      - LIMITE_POR_MINUTO=${LIMITE_POR_MINUTO:-30}
+      <<: *otel
+      OTEL_SERVICE_NAME: gateway
+      URL_GERACAO: http://geracao:8003
+      URL_INGESTAO: http://ingestao:8001
+      REDIS_URL: redis://redis:6379/0
+      JWT_SEGREDO: ${JWT_SEGREDO:?copie o .env.example para .env}
+      USUARIO_DEMO: ${USUARIO_DEMO:?copie o .env.example para .env}
+      SENHA_DEMO: ${SENHA_DEMO:?copie o .env.example para .env}
+      LIMITE_POR_MINUTO: ${LIMITE_POR_MINUTO:-30}
     depends_on:
       redis: {condition: service_healthy}
       geracao: {condition: service_started}

@@ -6,3 +6,7 @@ numpy==2.1.1
 redis==5.0.8
 requests==2.32.3
 pyjwt==2.9.0
+opentelemetry-distro==0.66b2
+opentelemetry-exporter-otlp==1.45.2
+opentelemetry-instrumentation-fastapi==0.66b2
+opentelemetry-instrumentation-requests==0.66b2
