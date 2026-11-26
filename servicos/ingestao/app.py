@@ -11,7 +11,7 @@ import os
 import json
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from servicos.comum.embeddings import Vetorizador
