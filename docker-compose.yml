@@ -1,33 +1,56 @@
+
 services:
   redis:
     image: redis:7-alpine
-    ports: ["6379:6379"]
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      retries: 5
+    ports:
+      - "6379:6379"
 
-  inferencia:
-    build: ./inferencia
+  ingestao:
+    build: .
+    command: uvicorn servicos.ingestao.app:app --host 0.0.0.0 --port 8001
+    ports:
+      - "8001:8001"
+    volumes:
+      - dados_ingestao:/app/servicos/ingestao/dados
     environment:
-      - REDIS_URL=redis://redis:6379/0
-    depends_on:
-      redis: {condition: service_healthy}
+      - ARQUIVO_INDICE=/app/servicos/ingestao/dados/indice.json
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
 
+  recuperacao:
+    build: .
+    command: uvicorn servicos.recuperacao.app:app --host 0.0.0.0 --port 8002
+    ports:
+      - "8002:8002"
+    environment:
+      - URL_INGESTAO=http://ingestao:8001
+    depends_on:
+      - ingestao
+
+  geracao:
+    build: .
+    command: uvicorn servicos.geracao.app:app --host 0.0.0.0 --port 8003
+    ports:
+      - "8003:8003"
+    environment:
+      - URL_RECUPERACAO=http://recuperacao:8002
+      - LLM_API_KEY=${LLM_API_KEY:-}
+    depends_on:
+      - recuperacao
+
+      
   worker:
-    build: ./worker
+    build: .
+    command: python -m servicos.mensageria.worker
     environment:
-      - REDIS_URL=redis://redis:6379/0
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      URL_INGESTAO: http://ingestao:8001
     depends_on:
-      redis: {condition: service_healthy}
+      - redis
+      - ingestao
+    restart: unless-stopped
 
-  gateway:
-    build: ./gateway
-    ports: ["8000:8000"]
-    environment:
-      - URL_INFERENCIA=http://inferencia:8001
-      - JWT_SEGREDO=${JWT_SEGREDO:-troque-este-segredo}
-    depends_on: [inferencia]
 
-# Observe: os servicos se referenciam pelo NOME (inferencia, redis),
-# nunca por IP fixo. Isso e descoberta de servicos. (Aula 14)
+volumes:
+  dados_ingestao:

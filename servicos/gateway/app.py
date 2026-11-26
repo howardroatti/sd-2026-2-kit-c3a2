@@ -5,7 +5,7 @@ JA PRONTO: roteamento para o servico de inferencia e log de requisicoes.
 TAREFA 1: autenticacao por JWT.
 TAREFA 2: limite de requisicoes por cliente (rate limit).
 
-Rodar: uvicorn app:app --port 8000
+Rodar: uvicorn servicos.gateway.app:app --port 8000
 """
 import os
 import time
