@@ -1,0 +1,27 @@
+# Deploy público atrás de um Traefik já existente (rede Docker externa "proxy").
+# Alternativa ao compose.publico.yml (Caddy) quando 80/443 já pertencem ao Traefik.
+#
+#     docker compose -f docker-compose.yml -f compose.traefik.yml up -d --build --wait
+#
+# TLS é terminado pelo Traefik (certificado padrão da store). Só o gateway
+# entra na rede "proxy"; os demais serviços continuam internos.
+services:
+  gateway:
+    environment:
+      AMBIENTE: publico
+      FORWARDED_ALLOW_IPS: "*"
+      JWT_SEGREDO: "${JWT_SEGREDO:?Configure JWT_SEGREDO no .env}"
+      USUARIOS: "${USUARIOS:?Configure USUARIOS no .env}"
+    networks: [default, proxy]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: proxy
+      traefik.http.routers.plataforma-ia.rule: "Host(`${DOMINIO:?Configure DOMINIO no .env}`) && !PathPrefix(`/metrics`)"
+      traefik.http.routers.plataforma-ia.entrypoints: websecure
+      traefik.http.routers.plataforma-ia.tls: "true"
+      traefik.http.routers.plataforma-ia.middlewares: security-headers@file
+      traefik.http.services.plataforma-ia.loadbalancer.server.port: "8000"
+
+networks:
+  proxy:
+    external: true

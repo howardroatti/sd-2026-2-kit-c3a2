@@ -56,6 +56,12 @@ Requisitos: uma VM Linux com Docker Engine atualizado e Compose v2, IPv4 públic
 
    Caddy emite e renova o certificado TLS quando o DNS e a rede estão corretos. Para acessar o Jaeger da VM, use `ssh -L 16686:127.0.0.1:16686 USUARIO@IP_DA_VM`.
 
+   **Variante com Traefik já existente** (usada em `ia.arthurssrichard.com`): se a VM já tem um Traefik ocupando 80/443, com a rede Docker externa `proxy` e um certificado padrão (por exemplo, Cloudflare Origin com o DNS em modo proxy), troque o override do Caddy por `compose.traefik.yml`. Só o gateway entra na rede `proxy`, e `/metrics` fica de fora do roteamento:
+
+   ```bash
+   docker compose -f docker-compose.yml -f compose.traefik.yml up -d --build --wait
+   ```
+
 4. Valide de outra máquina:
 
    ```bash

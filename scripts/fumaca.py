@@ -32,6 +32,8 @@ passos_ok = 0
 def requisicao(metodo: str, caminho: str, corpo=None, token=None, *, base=BASE) -> tuple[int, dict]:
     pedido = urllib.request.Request(base + caminho, method=metodo)
     pedido.add_header("Content-Type", "application/json")
+    # O User-Agent padrão do urllib é bloqueado por CDNs (ex.: Cloudflare, erro 1010).
+    pedido.add_header("User-Agent", "plataforma-ia-fumaca/1.0")
     if token:
         pedido.add_header("Authorization", f"Bearer {token}")
     dados = json.dumps(corpo).encode() if corpo is not None else None
